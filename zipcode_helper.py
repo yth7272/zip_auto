@@ -53,34 +53,42 @@ def extract_base_address(full_address):
 
     address_no_paren = re.sub(r"\([^)]+\)", "", address).strip()
 
-    # 상세주소 패턴 제거
-    detail_patterns = [
-        r"\s+\d+동\s*\d*호?.*$",
-        r"\s+[A-Za-z가-힣]+동(?![가-힣])\s*\d*호?.*$",
-        r"\s+\d+층.*$",
-        r"\s+\d+-\d+호?.*$",
-        r"\s+\d+호.*$",
-        r"\s+[가-힣]+아파트.*$",
-        r"\s+[가-힣]+빌딩.*$",
-        r"\s+[가-힣]+타워.*$",
-        r"\s+[가-힣]+오피스텔.*$",
-        r"\s+[가-힣]+빌라.*$",
-        r"\s+[가-힣]+맨션.*$",
-        r"\s+[가-힣]+주택.*$",
-        r"\s+[가-힣]+마을.*$",
-        r"\s+[가-힣]+단지.*$",
-    ]
+    base_address = None
 
-    base_address = address_no_paren
-    for pattern in detail_patterns:
-        base_address = re.sub(pattern, "", base_address, flags=re.IGNORECASE)
-
-    # 도로명 주소 기본 패턴 추출
-    # ~로N번길, ~로N길 패턴 지원 (예: 재반로125번길 30)
-    road_pattern = r"^(.+?(?:시|도|군|구)\s+.+?(?:로|길)(?:\s*\d+번?길)?\s*\d+(?:-\d+)?)"
-    road_match = re.match(road_pattern, base_address)
+    # 1단계: 도로명 주소 패턴 직접 추출 (~로/~길 + 건물번호)
+    road_pattern = r"^(.+?(?:로|길)(?:\s*\d+번?길)?\s*\d+(?:-\d+)?)"
+    road_match = re.match(road_pattern, address_no_paren)
     if road_match:
         base_address = road_match.group(1)
+
+    # 2단계: 지번 주소 패턴 직접 추출 (동/리 + 번지)
+    if not base_address:
+        jibun_pattern = r"^(.+?(?:동\d*가?|리|읍|면)\s+\d+(?:-\d+)?)"
+        jibun_match = re.match(jibun_pattern, address_no_paren)
+        if jibun_match:
+            base_address = jibun_match.group(1)
+
+    # 3단계: 패턴 매칭 실패 시 상세주소 제거 후 반환
+    if not base_address:
+        detail_patterns = [
+            r"\s+\d+동\s*\d*호?.*$",
+            r"\s+[A-Za-z가-힣]+동(?![가-힣]|\d+가)\s*\d*호?.*$",
+            r"\s+\d+층.*$",
+            r"\s+\d+-\d+호?.*$",
+            r"\s+\d+호.*$",
+            r"\s+[가-힣]+아파트.*$",
+            r"\s+[가-힣]+빌딩.*$",
+            r"\s+[가-힣]+타워.*$",
+            r"\s+[가-힣]+오피스텔.*$",
+            r"\s+[가-힣]+빌라.*$",
+            r"\s+[가-힣]+맨션.*$",
+            r"\s+[가-힣]+주택.*$",
+            r"\s+[가-힣]+마을.*$",
+            r"\s+[가-힣]+단지.*$",
+        ]
+        base_address = address_no_paren
+        for pattern in detail_patterns:
+            base_address = re.sub(pattern, "", base_address, flags=re.IGNORECASE)
 
     if paren_content:
         base_address = f"{base_address} {paren_content}"
