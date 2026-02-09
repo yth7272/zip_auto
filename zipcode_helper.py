@@ -76,7 +76,8 @@ def extract_base_address(full_address):
         base_address = re.sub(pattern, "", base_address, flags=re.IGNORECASE)
 
     # 도로명 주소 기본 패턴 추출
-    road_pattern = r"^(.+?(?:시|도|군|구)\s+.+?(?:로|길)\s*\d+(?:-\d+)?)"
+    # ~로N번길, ~로N길 패턴 지원 (예: 재반로125번길 30)
+    road_pattern = r"^(.+?(?:시|도|군|구)\s+.+?(?:로|길)(?:\s*\d+번?길)?\s*\d+(?:-\d+)?)"
     road_match = re.match(road_pattern, base_address)
     if road_match:
         base_address = road_match.group(1)
