@@ -5,6 +5,7 @@
 # Streamlit Cloud: st.secrets 에서 로드
 
 import os
+import sys
 
 import streamlit as st
 
@@ -24,23 +25,35 @@ def load_env(filename: str) -> dict:
     return result
 
 
-def _get_key(env_file: str, key: str) -> str:
-    """로컬 ~/.secrets/ 우선, 없으면 st.secrets fallback"""
-    path = os.path.expanduser(f"~/.secrets/{env_file}")
-    if os.path.exists(path):
-        return load_env(env_file)[key]
-    return st.secrets[key]
+def _is_local() -> bool:
+    """로컬 환경 여부 (~/.secrets/ 디렉토리 존재 확인)"""
+    return os.path.isdir(os.path.expanduser("~/.secrets"))
 
 
-# API Keys
-GEMINI_API_KEY = _get_key("ai_gemini.env", "GEMINI_API_KEY")
-JUSO_API_KEY = _get_key("juso_api.env", "JUSO_API_KEY")
+IS_LOCAL = _is_local()
 
-# Google Sheets 서비스 계정
-_local_sa = os.path.expanduser("~/.secrets/google_order_automation.json")
-if os.path.exists(_local_sa):
-    SERVICE_ACCOUNT_FILE = _local_sa
+if IS_LOCAL:
+    # ── 로컬: ~/.secrets/ 파일에서 로드 ──
+    _gemini = load_env("ai_gemini.env")
+    _juso = load_env("juso_api.env")
+    GEMINI_API_KEY = _gemini["GEMINI_API_KEY"]
+    JUSO_API_KEY = _juso["JUSO_API_KEY"]
+
+    SERVICE_ACCOUNT_FILE = os.path.expanduser("~/.secrets/google_order_automation.json")
     SERVICE_ACCOUNT_INFO = None
 else:
-    SERVICE_ACCOUNT_FILE = None
-    SERVICE_ACCOUNT_INFO = dict(st.secrets["gcp_service_account"])
+    # ── Streamlit Cloud: st.secrets 에서 로드 ──
+    try:
+        GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+        JUSO_API_KEY = st.secrets["JUSO_API_KEY"]
+        SERVICE_ACCOUNT_FILE = None
+        SERVICE_ACCOUNT_INFO = dict(st.secrets["gcp_service_account"])
+    except KeyError as e:
+        available = list(st.secrets.keys()) if hasattr(st.secrets, 'keys') else []
+        st.error(
+            f"Secrets 설정 오류: `{e}` 키를 찾을 수 없습니다.\n\n"
+            f"현재 등록된 키: `{available}`\n\n"
+            "Streamlit Cloud > Settings > Secrets 에 "
+            "GEMINI_API_KEY, JUSO_API_KEY, [gcp_service_account] 를 설정하세요."
+        )
+        sys.exit(1)
