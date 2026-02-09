@@ -1,9 +1,12 @@
 # ==========================================
 # [설정값] API 키 및 기본 설정
 # ==========================================
-# ~/.secrets/ 에서 인증정보를 로드
+# 로컬: ~/.secrets/ 에서 로드
+# Streamlit Cloud: st.secrets 에서 로드
 
 import os
+
+import streamlit as st
 
 
 def load_env(filename: str) -> dict:
@@ -21,12 +24,18 @@ def load_env(filename: str) -> dict:
     return result
 
 
-# API Keys
-_gemini = load_env("ai_gemini.env")
-_juso = load_env("juso_api.env")
+def _get_key(env_file: str, key: str) -> str:
+    """로컬 ~/.secrets/ 우선, 없으면 st.secrets fallback"""
+    path = os.path.expanduser(f"~/.secrets/{env_file}")
+    if os.path.exists(path):
+        return load_env(env_file)[key]
+    return st.secrets[key]
 
-GEMINI_API_KEY = _gemini["GEMINI_API_KEY"]
-JUSO_API_KEY = _juso["JUSO_API_KEY"]
+
+# API Keys
+GEMINI_API_KEY = _get_key("ai_gemini.env", "GEMINI_API_KEY")
+JUSO_API_KEY = _get_key("juso_api.env", "JUSO_API_KEY")
 
 # Google Sheets 서비스 계정
-SERVICE_ACCOUNT_FILE = os.path.expanduser("~/.secrets/google_order_automation.json")
+_local_sa = os.path.expanduser("~/.secrets/google_order_automation.json")
+SERVICE_ACCOUNT_FILE = _local_sa if os.path.exists(_local_sa) else "service_account.json"
