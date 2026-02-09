@@ -106,9 +106,24 @@ if st.session_state.sheet_connected and st.session_state.preview_data:
     preview = st.session_state.preview_data
     headers = st.session_state.headers
 
+    # 중복 헤더 처리: 같은 이름이 있으면 _2, _3 등 접미사 추가
+    def deduplicate_headers(cols):
+        seen = {}
+        result = []
+        for col in cols:
+            if col in seen:
+                seen[col] += 1
+                result.append(f"{col}_{seen[col]}")
+            else:
+                seen[col] = 1
+                result.append(col)
+        return result
+
+    display_headers = deduplicate_headers(headers)
+
     # 미리보기 테이블 표시
     if len(preview) > 1:
-        df_preview = pd.DataFrame(preview[1:], columns=headers)
+        df_preview = pd.DataFrame(preview[1:], columns=display_headers)
         st.dataframe(df_preview, use_container_width=True, height=300)
     else:
         st.warning("시트에 데이터가 없습니다.")
