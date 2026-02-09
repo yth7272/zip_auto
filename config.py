@@ -38,4 +38,9 @@ JUSO_API_KEY = _get_key("juso_api.env", "JUSO_API_KEY")
 
 # Google Sheets 서비스 계정
 _local_sa = os.path.expanduser("~/.secrets/google_order_automation.json")
-SERVICE_ACCOUNT_FILE = _local_sa if os.path.exists(_local_sa) else "service_account.json"
+if os.path.exists(_local_sa):
+    SERVICE_ACCOUNT_FILE = _local_sa
+    SERVICE_ACCOUNT_INFO = None
+else:
+    SERVICE_ACCOUNT_FILE = None
+    SERVICE_ACCOUNT_INFO = dict(st.secrets["gcp_service_account"])

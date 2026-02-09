@@ -6,12 +6,19 @@ import re
 import gspread
 from google.oauth2.service_account import Credentials
 
-from config import SERVICE_ACCOUNT_FILE
+from config import SERVICE_ACCOUNT_FILE, SERVICE_ACCOUNT_INFO
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive.readonly",
 ]
+
+
+def _get_credentials():
+    """로컬은 파일, Streamlit Cloud는 secrets에서 인증"""
+    if SERVICE_ACCOUNT_FILE:
+        return Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+    return Credentials.from_service_account_info(SERVICE_ACCOUNT_INFO, scopes=SCOPES)
 
 
 def connect_sheet(sheet_url: str, worksheet_name: str = None):
@@ -25,7 +32,7 @@ def connect_sheet(sheet_url: str, worksheet_name: str = None):
     Returns:
         tuple: (gspread.Worksheet, gspread.Spreadsheet)
     """
-    creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+    creds = _get_credentials()
     gc = gspread.authorize(creds)
 
     spreadsheet = gc.open_by_url(sheet_url)
@@ -40,7 +47,7 @@ def connect_sheet(sheet_url: str, worksheet_name: str = None):
 
 def get_worksheet_names(sheet_url: str) -> list:
     """스프레드시트의 모든 워크시트 이름 반환"""
-    creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+    creds = _get_credentials()
     gc = gspread.authorize(creds)
     spreadsheet = gc.open_by_url(sheet_url)
     return [ws.title for ws in spreadsheet.worksheets()]
