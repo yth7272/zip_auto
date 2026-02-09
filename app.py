@@ -183,6 +183,10 @@ if (
 
     if not rows_to_process:
         st.success("모든 행에 우편번호가 이미 있습니다! 🎉")
+        if st.button("🔄 재스캔", key="rescan_empty"):
+            st.session_state.processing_done = False
+            st.session_state.results = []
+            st.rerun()
     else:
         # 미리보기: 처리 대상 주소 목록
         with st.expander(f"처리 대상 주소 {len(rows_to_process)}건 보기"):
@@ -192,7 +196,7 @@ if (
                 st.text(f"  ... 외 {len(rows_to_process) - 20}건")
 
         # 실행 버튼
-        col_run, col_option = st.columns([1, 2])
+        col_run, col_rescan, col_option = st.columns([2, 1, 3])
         with col_option:
             use_gemini = st.checkbox("Gemini AI 보정 사용 (정규식 실패 시)", value=True)
 
@@ -202,6 +206,12 @@ if (
                 type="primary",
                 use_container_width=True,
             )
+
+        with col_rescan:
+            if st.button("🔄 재스캔", key="rescan_run"):
+                st.session_state.processing_done = False
+                st.session_state.results = []
+                st.rerun()
 
         # ── 처리 실행 ──
         if run_clicked:
@@ -331,6 +341,10 @@ if st.session_state.processing_done and st.session_state.results:
                     write_results(ws, write_data, zip_idx, acc_idx)
                     st.success(f"✅ {len(writable_results)}건이 시트에 기록되었습니다!")
                     st.balloons()
+                    if st.button("🔄 재스캔", key="rescan_done"):
+                        st.session_state.processing_done = False
+                        st.session_state.results = []
+                        st.rerun()
                 except Exception as e:
                     st.error(f"기록 실패: {e}")
     else:
