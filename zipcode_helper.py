@@ -56,7 +56,7 @@ def extract_base_address(full_address):
     # 상세주소 패턴 제거
     detail_patterns = [
         r"\s+\d+동\s*\d*호?.*$",
-        r"\s+[A-Za-z가-힣]+동\s*\d*호?.*$",
+        r"\s+[A-Za-z가-힣]+동(?![가-힣])\s*\d*호?.*$",
         r"\s+\d+층.*$",
         r"\s+\d+-\d+호?.*$",
         r"\s+\d+호.*$",
