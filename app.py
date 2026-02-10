@@ -213,7 +213,7 @@ if (
         # 실행 버튼
         col_run, col_rescan, col_option = st.columns([2, 1, 3])
         with col_option:
-            use_gemini = st.checkbox("Gemini AI 보정 사용 (정규식 실패 시)", value=True)
+            use_gemini = st.checkbox("Gemini AI 주소 정제 (지번/오타 자동 보정)", value=True)
 
         with col_run:
             run_clicked = st.button(

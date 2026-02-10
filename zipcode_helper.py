@@ -137,11 +137,12 @@ def _find_best_match(search_results, full_input, base_address):
 def recommend_zipcode(address: str, use_gemini_fallback: bool = True) -> dict:
     """
     주소를 기반으로 우편번호를 추천합니다.
-    기본 정규식 정제 → API 조회 → (실패 시) Gemini fallback
+    Gemini 활성화 시: Gemini 정제 → API 조회 → (실패 시) 정규식 fallback
+    Gemini 비활성화 시: 정규식 정제 → API 조회
 
     Args:
         address: 주소 문자열
-        use_gemini_fallback: Gemini fallback 사용 여부
+        use_gemini_fallback: Gemini AI 사용 여부
 
     Returns:
         dict: {
@@ -161,22 +162,54 @@ def recommend_zipcode(address: str, use_gemini_fallback: bool = True) -> dict:
     if not address:
         return result
 
-    # ── 1단계: 정규식 기반 정제 ──
+    # ── 1단계: Gemini AI 정제 (활성화 시 우선 시도) ──
+    if use_gemini_fallback:
+        gemini_result = refine_address_with_gemini(address)
+        result["gemini_info"] = gemini_result
+
+        if gemini_result.get("success"):
+            search_keyword = gemini_result.get("search_keyword", "")
+            if search_keyword:
+                search_results = search_zipcode_api(search_keyword)
+
+                if not search_results:
+                    refined = gemini_result.get("refined_address", "")
+                    if refined and refined != search_keyword:
+                        search_results = search_zipcode_api(refined)
+
+                if search_results:
+                    result["candidates"] = [
+                        {"zipcode": item["zipNo"], "road_addr": item["roadAddr"]}
+                        for item in search_results[:5]
+                    ]
+
+                    best_match, best_similarity = _find_best_match(
+                        search_results, address, search_keyword
+                    )
+
+                    if best_match:
+                        gemini_confidence = gemini_result.get("confidence", 0.5)
+                        raw_accuracy = best_similarity * gemini_confidence
+                        accuracy = min(95, max(30, int(raw_accuracy * 100)))
+
+                        result["zipcode"] = best_match["zipNo"]
+                        result["road_addr"] = best_match["roadAddr"]
+                        result["accuracy"] = accuracy
+                        result["source"] = "gemini+api"
+                        return result
+
+    # ── 2단계: 정규식 기반 정제 (Gemini 미사용 또는 실패 시) ──
     base_address = extract_base_address(address)
     if not base_address:
         base_address = address
 
-    # ── 2단계: API 조회 ──
     search_results = search_zipcode_api(base_address)
 
-    # 결과 없으면 번호 제거 후 재시도
     if not search_results:
         shorter = re.sub(r"\s+\d+(-\d+)?$", "", base_address)
         if shorter != base_address:
             search_results = search_zipcode_api(shorter)
 
-    # ── 3단계: 결과 있으면 매칭 ──
-    regex_fallback = None
     if search_results:
         result["candidates"] = [
             {"zipcode": item["zipNo"], "road_addr": item["roadAddr"]}
@@ -189,65 +222,10 @@ def recommend_zipcode(address: str, use_gemini_fallback: bool = True) -> dict:
 
         if best_match:
             accuracy = min(100, int(best_similarity * 100))
-            # 정확도가 충분하면 바로 반환, 낮으면 Gemini fallback으로 넘김
-            if accuracy > 70:
-                result["zipcode"] = best_match["zipNo"]
-                result["road_addr"] = best_match["roadAddr"]
-                result["accuracy"] = accuracy
-                result["source"] = "regex+api"
-                return result
-            # 낮은 정확도 결과는 후보로만 보존 (Gemini 실패 시 사용)
-            regex_fallback = {
-                "match": best_match,
-                "accuracy": accuracy,
-            }
-        else:
-            regex_fallback = None
-
-    # ── 4단계: Gemini fallback ──
-    if use_gemini_fallback:
-        gemini_result = refine_address_with_gemini(address)
-        result["gemini_info"] = gemini_result
-
-        if gemini_result.get("success"):
-            search_keyword = gemini_result.get("search_keyword", "")
-            if search_keyword:
-                gemini_search_results = search_zipcode_api(search_keyword)
-
-                if not gemini_search_results:
-                    # refined_address로도 시도
-                    refined = gemini_result.get("refined_address", "")
-                    if refined and refined != search_keyword:
-                        gemini_search_results = search_zipcode_api(refined)
-
-                if gemini_search_results:
-                    result["candidates"] = [
-                        {"zipcode": item["zipNo"], "road_addr": item["roadAddr"]}
-                        for item in gemini_search_results[:5]
-                    ]
-
-                    best_match, best_similarity = _find_best_match(
-                        gemini_search_results, address, search_keyword
-                    )
-
-                    if best_match:
-                        gemini_confidence = gemini_result.get("confidence", 0.5)
-                        # Gemini 경유 정확도: API 유사도 × Gemini 신뢰도 기반
-                        raw_accuracy = best_similarity * gemini_confidence
-                        accuracy = min(85, max(30, int(raw_accuracy * 100)))
-
-                        result["zipcode"] = best_match["zipNo"]
-                        result["road_addr"] = best_match["roadAddr"]
-                        result["accuracy"] = accuracy
-                        result["source"] = "gemini+api"
-                        return result
-
-    # Gemini도 실패 시, 낮은 정확도의 regex 결과라도 반환
-    if regex_fallback:
-        result["zipcode"] = regex_fallback["match"]["zipNo"]
-        result["road_addr"] = regex_fallback["match"]["roadAddr"]
-        result["accuracy"] = regex_fallback["accuracy"]
-        result["source"] = "regex+api(low)"
-        return result
+            result["zipcode"] = best_match["zipNo"]
+            result["road_addr"] = best_match["roadAddr"]
+            result["accuracy"] = accuracy
+            result["source"] = "regex+api"
+            return result
 
     return result
