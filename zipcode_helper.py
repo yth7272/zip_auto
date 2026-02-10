@@ -113,6 +113,21 @@ def normalize_zipcode(zipcode):
     return zipcode_str
 
 
+def _build_retry_keyword(address):
+    """검색 실패 시 동/로/길 접미사를 제거한 핵심 키워드만 추출"""
+    cleaned = address.strip()
+    # 괄호 내용 제거
+    cleaned = re.sub(r"\([^)]+\)", "", cleaned).strip()
+    # 동/로/길 접미사 제거: 잠원동60 → 잠원, 이곡동 → 이곡
+    cleaned = re.sub(r"([가-힣]{2,})(?:동\d*가?|로|길)\d*", r"\1", cleaned)
+    # 숫자, 특수문자 제거 (한글과 공백만 유지)
+    cleaned = re.sub(r"[^가-힣\s]", " ", cleaned)
+    # 단일 글자 단어 제거 (호, 동, 층 등 잔여 조각)
+    words = [w for w in cleaned.split() if len(w) > 1]
+    cleaned = " ".join(words)
+    return cleaned if len(cleaned) > 3 else None
+
+
 def _find_best_match(search_results, full_input, base_address):
     """검색 결과에서 가장 유사한 주소 찾기"""
     best_match = None
@@ -227,5 +242,27 @@ def recommend_zipcode(address: str, use_gemini_fallback: bool = True) -> dict:
             result["accuracy"] = accuracy
             result["source"] = "regex+api"
             return result
+
+    # ── 3단계: 키워드 재시도 (동/로/길 접미사 제거 후 핵심 키워드 검색) ──
+    retry_keyword = _build_retry_keyword(address)
+    if retry_keyword:
+        search_results = search_zipcode_api(retry_keyword)
+        if search_results:
+            result["candidates"] = [
+                {"zipcode": item["zipNo"], "road_addr": item["roadAddr"]}
+                for item in search_results[:5]
+            ]
+
+            best_match, best_similarity = _find_best_match(
+                search_results, address, retry_keyword
+            )
+
+            if best_match:
+                accuracy = min(75, int(best_similarity * 100))
+                result["zipcode"] = best_match["zipNo"]
+                result["road_addr"] = best_match["roadAddr"]
+                result["accuracy"] = accuracy
+                result["source"] = "retry"
+                return result
 
     return result
