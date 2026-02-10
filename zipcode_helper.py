@@ -176,6 +176,7 @@ def recommend_zipcode(address: str, use_gemini_fallback: bool = True) -> dict:
             search_results = search_zipcode_api(shorter)
 
     # ── 3단계: 결과 있으면 매칭 ──
+    regex_fallback = None
     if search_results:
         result["candidates"] = [
             {"zipcode": item["zipNo"], "road_addr": item["roadAddr"]}
@@ -188,11 +189,20 @@ def recommend_zipcode(address: str, use_gemini_fallback: bool = True) -> dict:
 
         if best_match:
             accuracy = min(100, int(best_similarity * 100))
-            result["zipcode"] = best_match["zipNo"]
-            result["road_addr"] = best_match["roadAddr"]
-            result["accuracy"] = accuracy
-            result["source"] = "regex+api"
-            return result
+            # 정확도가 충분하면 바로 반환, 낮으면 Gemini fallback으로 넘김
+            if accuracy >= 55:
+                result["zipcode"] = best_match["zipNo"]
+                result["road_addr"] = best_match["roadAddr"]
+                result["accuracy"] = accuracy
+                result["source"] = "regex+api"
+                return result
+            # 낮은 정확도 결과는 후보로만 보존 (Gemini 실패 시 사용)
+            regex_fallback = {
+                "match": best_match,
+                "accuracy": accuracy,
+            }
+        else:
+            regex_fallback = None
 
     # ── 4단계: Gemini fallback ──
     if use_gemini_fallback:
@@ -231,5 +241,13 @@ def recommend_zipcode(address: str, use_gemini_fallback: bool = True) -> dict:
                         result["accuracy"] = accuracy
                         result["source"] = "gemini+api"
                         return result
+
+    # Gemini도 실패 시, 낮은 정확도의 regex 결과라도 반환
+    if regex_fallback:
+        result["zipcode"] = regex_fallback["match"]["zipNo"]
+        result["road_addr"] = regex_fallback["match"]["roadAddr"]
+        result["accuracy"] = regex_fallback["accuracy"]
+        result["source"] = "regex+api(low)"
+        return result
 
     return result
