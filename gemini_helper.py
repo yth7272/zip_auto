@@ -8,7 +8,7 @@ import requests
 
 from config import GEMINI_API_KEY
 
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-flash-lite:generateContent"
 
 SYSTEM_PROMPT = """당신은 한국 주소 정제 전문가입니다. 
 입력된 주소를 분석하여 행정안전부 도로명주소 API에서 검색 가능한 형태로 정제해주세요.
