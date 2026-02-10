@@ -190,7 +190,7 @@ def recommend_zipcode(address: str, use_gemini_fallback: bool = True) -> dict:
         if best_match:
             accuracy = min(100, int(best_similarity * 100))
             # 정확도가 충분하면 바로 반환, 낮으면 Gemini fallback으로 넘김
-            if accuracy >= 55:
+            if accuracy > 70:
                 result["zipcode"] = best_match["zipNo"]
                 result["road_addr"] = best_match["roadAddr"]
                 result["accuracy"] = accuracy
