@@ -177,6 +177,9 @@ def recommend_zipcode(address: str, use_gemini_fallback: bool = True) -> dict:
     if not address:
         return result
 
+    # 각 단계의 최선 결과를 모아서 가장 정확도 높은 것을 반환
+    candidates = []  # [(accuracy, zipNo, roadAddr, source, api_candidates)]
+
     # ── 1단계: Gemini AI 정제 (활성화 시 우선 시도) ──
     if use_gemini_fallback:
         gemini_result = refine_address_with_gemini(address)
@@ -193,27 +196,29 @@ def recommend_zipcode(address: str, use_gemini_fallback: bool = True) -> dict:
                         search_results = search_zipcode_api(refined)
 
                 if search_results:
-                    result["candidates"] = [
-                        {"zipcode": item["zipNo"], "road_addr": item["roadAddr"]}
-                        for item in search_results[:5]
-                    ]
-
                     best_match, best_similarity = _find_best_match(
                         search_results, address, search_keyword
                     )
-
                     if best_match:
                         gemini_confidence = gemini_result.get("confidence", 0.5)
                         raw_accuracy = best_similarity * gemini_confidence
                         accuracy = min(95, max(30, int(raw_accuracy * 100)))
+                        api_cands = [
+                            {"zipcode": item["zipNo"], "road_addr": item["roadAddr"]}
+                            for item in search_results[:5]
+                        ]
+                        candidates.append((accuracy, best_match["zipNo"], best_match["roadAddr"], "gemini+api", api_cands))
 
-                        result["zipcode"] = best_match["zipNo"]
-                        result["road_addr"] = best_match["roadAddr"]
-                        result["accuracy"] = accuracy
-                        result["source"] = "gemini+api"
-                        return result
+                        # 높은 정확도면 바로 반환 (불필요한 추가 검색 생략)
+                        if accuracy >= 80:
+                            result["zipcode"] = best_match["zipNo"]
+                            result["road_addr"] = best_match["roadAddr"]
+                            result["accuracy"] = accuracy
+                            result["source"] = "gemini+api"
+                            result["candidates"] = api_cands
+                            return result
 
-    # ── 2단계: 정규식 기반 정제 (Gemini 미사용 또는 실패 시) ──
+    # ── 2단계: 정규식 기반 정제 ──
     base_address = extract_base_address(address)
     if not base_address:
         base_address = address
@@ -226,43 +231,48 @@ def recommend_zipcode(address: str, use_gemini_fallback: bool = True) -> dict:
             search_results = search_zipcode_api(shorter)
 
     if search_results:
-        result["candidates"] = [
-            {"zipcode": item["zipNo"], "road_addr": item["roadAddr"]}
-            for item in search_results[:5]
-        ]
-
         best_match, best_similarity = _find_best_match(
             search_results, address, base_address
         )
-
         if best_match:
             accuracy = min(100, int(best_similarity * 100))
-            result["zipcode"] = best_match["zipNo"]
-            result["road_addr"] = best_match["roadAddr"]
-            result["accuracy"] = accuracy
-            result["source"] = "regex+api"
-            return result
+            api_cands = [
+                {"zipcode": item["zipNo"], "road_addr": item["roadAddr"]}
+                for item in search_results[:5]
+            ]
+            candidates.append((accuracy, best_match["zipNo"], best_match["roadAddr"], "regex+api", api_cands))
+
+            if accuracy >= 80:
+                result["zipcode"] = best_match["zipNo"]
+                result["road_addr"] = best_match["roadAddr"]
+                result["accuracy"] = accuracy
+                result["source"] = "regex+api"
+                result["candidates"] = api_cands
+                return result
 
     # ── 3단계: 키워드 재시도 (동/로/길 접미사 제거 후 핵심 키워드 검색) ──
     retry_keyword = _build_retry_keyword(address)
     if retry_keyword:
         search_results = search_zipcode_api(retry_keyword)
         if search_results:
-            result["candidates"] = [
-                {"zipcode": item["zipNo"], "road_addr": item["roadAddr"]}
-                for item in search_results[:5]
-            ]
-
             best_match, best_similarity = _find_best_match(
                 search_results, address, retry_keyword
             )
-
             if best_match:
                 accuracy = min(75, int(best_similarity * 100))
-                result["zipcode"] = best_match["zipNo"]
-                result["road_addr"] = best_match["roadAddr"]
-                result["accuracy"] = accuracy
-                result["source"] = "retry"
-                return result
+                api_cands = [
+                    {"zipcode": item["zipNo"], "road_addr": item["roadAddr"]}
+                    for item in search_results[:5]
+                ]
+                candidates.append((accuracy, best_match["zipNo"], best_match["roadAddr"], "retry", api_cands))
+
+    # ── 모든 단계의 결과 중 정확도 최고를 반환 ──
+    if candidates:
+        best = max(candidates, key=lambda x: x[0])
+        result["accuracy"] = best[0]
+        result["zipcode"] = best[1]
+        result["road_addr"] = best[2]
+        result["source"] = best[3]
+        result["candidates"] = best[4]
 
     return result
